@@ -1,0 +1,105 @@
+name: Test Environment & Branch Protection Automation
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Target branch for protection"
+        required: true
+        default: "main"
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+  deployments: write
+  actions: write
+
+jobs:
+  setup-governance:
+    name: Setup Environments & Branch Protection
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure environments
+        env:
+          GH_TOKEN: ${{ secrets.ADMIN_TOKEN || secrets.GH_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          echo "🔧 Setting up environments for $REPO"
+
+          declare -A REVIEWERS
+          REVIEWERS=(
+            [int]='[{"type":"User","id":12345678}]'
+            [qa]='[{"type":"User","id":12345678}]'
+            [uat]='[{"type":"User","id":12345678}]'
+            [staging]='[{"type":"User","id":12345678}]'
+            [prod]='[{"type":"User","id":12345678},{"type":"User","id":87654321}]'
+          )
+
+          for ENV in dev int qa uat staging prod; do
+            echo "➡️  Configuring environment: $ENV"
+
+            if [[ -n "${REVIEWERS[$ENV]}" ]]; then
+              gh api \
+                --method PUT \
+                --header "Accept: application/vnd.github+json" \
+                "/repos/${REPO}/environments/${ENV}" \
+                --raw-field wait_timer=0 \
+                --raw-field reviewers="${REVIEWERS[$ENV]}" \
+                --input - <<< '{"deployment_branch_policy": {"protected_branches": true, "custom_branch_policies": false}}'
+            else
+              gh api \
+                --method PUT \
+                --header "Accept: application/vnd.github+json" \
+                "/repos/${REPO}/environments/${ENV}" \
+                --raw-field wait_timer=0 \
+                --input - <<< '{"deployment_branch_policy": {"protected_branches": false, "custom_branch_policies": true}}'
+            fi
+          done
+
+      - name: Verify environments
+        env:
+          GH_TOKEN: ${{ secrets.ADMIN_TOKEN || secrets.GH_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          echo "✅ Environments created for $REPO:"
+          gh api /repos/${REPO}/environments --jq '.environments[].name'
+
+      - name: Apply branch protection rules
+        env:
+          GH_TOKEN: ${{ secrets.ADMIN_TOKEN || secrets.GH_TOKEN }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.event.inputs.branch }}
+        run: |
+          echo "🛡️ Applying branch protection for $BRANCH in $REPO..."
+
+          gh api \
+            --method PUT \
+            --header "Accept: application/vnd.github+json" \
+            "/repos/${REPO}/branches/${BRANCH}/protection" \
+            --input - <<< '{
+              "required_status_checks": {
+                "strict": true,
+                "contexts": []
+              },
+              "enforce_admins": true,
+              "required_pull_request_reviews": {
+                "required_approving_review_count": 1,
+                "require_code_owner_reviews": false
+              },
+              "restrictions": null
+            }'
+
+          echo "✅ Branch protection rules applied to ${BRANCH}"
+
+      - name: Confirm branch protection
+        env:
+          GH_TOKEN: ${{ secrets.ADMIN_TOKEN || secrets.GH_TOKEN }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.event.inputs.branch }}
+        run: |
+          echo "🔍 Current branch protection config for $BRANCH:"
+          gh api /repos/${REPO}/branches/${BRANCH}/protection --jq '{branch_protection: .}'
