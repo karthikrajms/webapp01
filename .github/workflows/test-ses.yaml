@@ -11,7 +11,7 @@ jobs:
       SES_FROM_EMAIL: "karthikraj.madeshwaran@agilisium.com"
       SES_TO_EMAIL: "karthikraj.madeshwaran@agilisium.com"
       SUBJECT: "Test SES Notification from GitHub Actions"
-      BODY: "This is a test email sent from GitHub Actions via AWS SES."
+      BODY: "This is a test email sent from GitHub Actions via AWS SES Test."
 
     steps:
       - name: Configure AWS credentials
