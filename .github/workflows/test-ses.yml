@@ -1,0 +1,29 @@
+name: Test SES Notification
+
+on:
+  workflow_dispatch:  # Allows manual trigger from GitHub UI
+
+jobs:
+  send-ses-email:
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: "us-west-2" # Change to your SES region
+      SES_FROM_EMAIL: "karthikraj.madeshwaran@agilisium.com"
+      SES_TO_EMAIL: "karthikraj.madeshwaran@agilisium.com"
+      SUBJECT: "Test SES Notification from GitHub Actions"
+      BODY: "This is a test email sent from GitHub Actions via AWS SES Test."
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Send SES email
+        run: |
+          aws ses send-email \
+            --from "${{ env.SES_FROM_EMAIL }}" \
+            --destination "ToAddresses=${{ env.SES_TO_EMAIL }}" \
+            --message "Subject={Data='${{ env.SUBJECT }}',Charset=utf-8},Body={Text={Data='${{ env.BODY }}',Charset=utf-8}}"
